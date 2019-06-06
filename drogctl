@@ -1,0 +1,25 @@
+#!/usr/bin/env bash
+
+if [ x"$1" = xclean ]; then
+    docker-compose down
+    rm -rf dronedb giteadata giteadb data   
+    exit 0;
+fi
+
+if [ x"$1" = xup ]; then
+    mkdir -p dronedb giteadata giteadb
+    docker-compose up -d
+    exit 0;
+fi
+
+if [ x"$1" = xrestart ]; then
+    docker-compose down
+    mkdir -p dronedb giteadata giteadb
+    docker-compose up -d
+    exit 0;
+fi
+
+
+# docker network inspect drognet &>/dev/null || docker network create --driver bridge drognet
+mkdir -p dronedb giteadata giteadb
+docker-compose "$@"

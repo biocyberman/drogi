@@ -1,0 +1,102 @@
+version: '2'
+
+volumes:
+  gitea-data:
+    driver_opts:
+      type: none
+      device: $PWD/giteadata
+      o: bind
+  db:
+    driver_opts:
+      type: none
+      device: $PWD/giteadb
+      o: bind
+  drone-db:
+    driver_opts:
+      type: none
+      device: $PWD/dronedb
+      o: bind
+
+networks:
+  drognet:
+    external: false
+
+services:
+  giteaserver:
+    image: gitea/gitea:latest
+    ports:
+      - 8380:3000
+      - 2222:22
+    volumes:
+      - gitea-data:/data
+      - ./data:/data/gitea
+    restart: always
+    environment:
+      - USER_UID=1000
+      - USER_GID=1000
+      - HTTP_PORT=3000
+      - DB_TYPE=postgres
+      - DB_HOST=gitdb:5432
+      - DB_USER=${POSTGRESUSER}
+      - DB_NAME=${POSTGRESDB}
+      - DB_PASSWD={POSTGRESPASS}
+      - APP_NAME="DROG (gitea + drone) test"
+      # this exposes to end users
+      - ROOT_URL=http://gitea:8380
+    networks:
+      - drognet
+
+
+  gitdb:
+    image: postgres:9.6
+    ports:
+      - 5432:5432
+    restart: always
+    volumes:
+      - db:/var/lib/postgresql/data
+    environment:
+      - POSTGRES_USER=${POSTGRESUSER}
+      - POSTGRES_PASSWORD=${POSTGRESPASS}
+      - POSTGRES_DB=${POSTGRESDB}
+    networks:
+      - drognet
+
+  droneserver:
+    image: drone/drone:latest
+    ports:
+      - 8381:80 # drone comtainer serves via port 80, we expose to end users via port 8381
+      - 9000:9000
+      - 8443:443
+    volumes:
+      - drone-db:/var/lib/drone/
+    restart: always
+    environment:
+      - DRONE_SERVER_HOST=localhost
+      - DRONE_SERVER_PROTO=http
+      - DRONE_TLS_AUTOCERT=false
+      - DRONE_GIT_ALWAYS_AUTH=false
+      - DRONE_RUNNER_CAPACITY=2
+      - DRONE_OPEN=true
+      - DRONE_SECRET=testdrone
+      - DRONE_GITEA=true
+      - DRONE_GITEA_SERVER=http://giteaserver:3000 # this is internal communication with gitea server on the same network
+      - DRONE_NETWORK=drognet
+    depends_on:
+      - giteaserver
+    networks:
+      - drognet
+
+
+  droneagent:
+    image: drone/agent:latest
+    command: agent
+    restart: always
+    depends_on:
+      - droneserver
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      - DRONE_SERVER=droneserver:9000
+      - DRONE_SECRET=testdrone
+    networks:
+      - drognet
